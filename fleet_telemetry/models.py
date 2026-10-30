@@ -98,11 +98,10 @@ class TelemetryFrame:
     pose: Pose
     noise: float  # scalar 1-sigma position noise, metres (derived from covariance)
     battery: float  # state of charge, 0..1
-    covariance: Optional[Covariance] = None  # 6x6 pose covariance, row-major
-    health: float = 1.0  # composite localisation/drive health, 0..1
+    covariance: Covariance  # required 6x6 pose covariance, row-major
+    health: float  # required composite localisation/drive health, 0..1
 
     def __post_init__(self) -> None:
-        if self.covariance is not None:
-            rows = self.covariance
-            if len(rows) != 6 or any(len(r) != 6 for r in rows):
-                raise ValueError("covariance must be 6x6")
+        rows = self.covariance
+        if rows is None or len(rows) != 6 or any(len(r) != 6 for r in rows):
+            raise ValueError("covariance must be 6x6")
