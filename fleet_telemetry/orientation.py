@@ -1,14 +1,33 @@
-"""Orientation math on v1 Euler poses (degrees, intrinsic Z-Y-X)."""
+"""Orientation math on v2 quaternion poses (Hamilton, scalar last)."""
 from __future__ import annotations
+
+import math
 
 import numpy as np
 
 from fleet_telemetry.models import Pose
 
 
-def rotation_matrix(pose: Pose) -> np.ndarray:
-    """Body-to-map rotation R = Rz(yaw) @ Ry(pitch) @ Rx(roll)."""
-    r, p, y = np.radians([pose.roll, pose.pitch, pose.yaw])
+def _normalised(qx: float, qy: float, qz: float, qw: float) -> tuple[float, float, float, float]:
+    n = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if n == 0.0:
+        raise ValueError("zero quaternion has no orientation")
+    return qx / n, qy / n, qz / n, qw / n
+
+
+def _rotation_from_quat(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+    qx, qy, qz, qw = _normalised(qx, qy, qz, qw)
+    return np.array(
+        [
+            [1.0 - 2.0 * (qy * qy + qz * qz), 2.0 * (qx * qy - qz * qw), 2.0 * (qx * qz + qy * qw)],
+            [2.0 * (qx * qy + qz * qw), 1.0 - 2.0 * (qx * qx + qz * qz), 2.0 * (qy * qz - qx * qw)],
+            [2.0 * (qx * qz - qy * qw), 2.0 * (qy * qz + qx * qw), 1.0 - 2.0 * (qx * qx + qy * qy)],
+        ]
+    )
+
+
+def _rotation_from_euler(roll_deg: float, pitch_deg: float, yaw_deg: float) -> np.ndarray:
+    r, p, y = np.radians([roll_deg, pitch_deg, yaw_deg])
     cr, sr = np.cos(r), np.sin(r)
     cp, sp = np.cos(p), np.sin(p)
     cy, sy = np.cos(y), np.sin(y)
@@ -18,8 +37,23 @@ def rotation_matrix(pose: Pose) -> np.ndarray:
     return rz @ ry @ rx
 
 
+def rotation_matrix(pose: Pose) -> np.ndarray:
+    """Body-to-map rotation built directly from the unit quaternion.
+
+    Quadratic in q, so q and -q give the same rotation. Falls back to Euler
+    only when a pose carries no quaternion.
+    """
+    if pose.qx is not None and pose.qy is not None and pose.qz is not None and pose.qw is not None:
+        return _rotation_from_quat(pose.qx, pose.qy, pose.qz, pose.qw)
+    return _rotation_from_euler(pose.roll, pose.pitch, pose.yaw)
+
+
 def heading_deg(pose: Pose) -> float:
-    """Yaw normalised to [0, 360)."""
+    """Yaw normalised to [0, 360), from the quaternion via atan2."""
+    if pose.qx is not None and pose.qy is not None and pose.qz is not None and pose.qw is not None:
+        qx, qy, qz, qw = _normalised(pose.qx, pose.qy, pose.qz, pose.qw)
+        yaw = math.degrees(math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz)))
+        return float(yaw % 360.0)
     return float(pose.yaw % 360.0)
 
 
