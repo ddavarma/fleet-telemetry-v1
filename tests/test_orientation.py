@@ -32,3 +32,15 @@ def test_heading_wraps_into_0_360(frames):
 def test_tilt_from_roll_and_pitch():
     assert tilt_deg(pose(roll=20.0)) == pytest.approx(20.0)
     assert tilt_deg(pose(pitch=-10.0, yaw=123.0)) == pytest.approx(10.0)
+
+
+def test_quaternion_negation_gives_same_rotation(frames):
+    # amr-03 has qw < 0; q and -q are the same rotation.
+    assert frames["amr-03"].pose.qw < 0
+    assert heading_deg(frames["amr-03"].pose) == pytest.approx(359.0)
+    for f in frames.values():
+        p = f.pose
+        neg = Pose(p.x, p.y, p.z, qx=-p.qx, qy=-p.qy, qz=-p.qz, qw=-p.qw)
+        assert np.allclose(rotation_matrix(p), rotation_matrix(neg), atol=1e-12)
+        assert heading_deg(neg) == pytest.approx(heading_deg(p))
+        assert tilt_deg(neg) == pytest.approx(tilt_deg(p))
