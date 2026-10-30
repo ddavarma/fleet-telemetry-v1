@@ -1,4 +1,4 @@
-"""Combine observations from several frames using the per-frame noise estimate."""
+"""Combine observations from several frames using the per-frame covariance."""
 from __future__ import annotations
 
 from typing import Sequence
@@ -6,11 +6,18 @@ from typing import Sequence
 import numpy as np
 
 from fleet_telemetry.models import TelemetryFrame
+from fleet_telemetry.orientation import heading_deg
 
 
 def position_variance(frame: TelemetryFrame) -> float:
-    """Isotropic position variance (m^2) implied by the scalar noise sigma."""
-    return frame.noise**2
+    """Isotropic position variance (m^2): ``trace(P_pos) / 3``.
+
+    ``P_pos`` is the position block ``covariance[0:3][0:3]`` (m²). For the
+    isotropic fixtures this equals the old scalar ``noise`` squared, so fusion
+    weights are unchanged.
+    """
+    cov = np.asarray(frame.covariance, dtype=float)
+    return float(np.trace(cov[:3, :3]) / 3.0)
 
 
 def fuse_positions(frames: Sequence[TelemetryFrame]) -> tuple[np.ndarray, float]:
@@ -26,11 +33,11 @@ def fuse_positions(frames: Sequence[TelemetryFrame]) -> tuple[np.ndarray, float]
 
 
 def fuse_heading(frames: Sequence[TelemetryFrame]) -> float:
-    """Weighted circular mean of yaw in degrees, [0, 360)."""
+    """Weighted circular mean of heading in degrees, [0, 360)."""
     if not frames:
         raise ValueError("need at least one frame")
     weights = np.array([1.0 / position_variance(f) for f in frames])
-    yaws = np.radians([f.pose.yaw for f in frames])
+    yaws = np.radians([heading_deg(f.pose) for f in frames])
     s = (weights * np.sin(yaws)).sum()
     c = (weights * np.cos(yaws)).sum()
     return float(np.degrees(np.arctan2(s, c)) % 360.0)

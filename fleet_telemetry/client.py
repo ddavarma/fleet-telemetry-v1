@@ -1,41 +1,73 @@
-"""Parse fleet telemetry API v1 payloads into domain objects."""
+"""Parse fleet telemetry API v2 payloads into domain objects."""
 from __future__ import annotations
 
+import math
 from typing import Any, Callable
 
-from fleet_telemetry.models import Pose, TelemetryFrame
+from fleet_telemetry.models import Pose, TelemetryFrame, position_sigma_from_covariance
 
-API_VERSION = "v1"
-BASE_PATH = "/v1"
+API_VERSION = "v2"
+BASE_PATH = "/v2"
 
 Transport = Callable[[str], dict[str, Any]]
 
 
 class TelemetryParseError(ValueError):
-    """Raised when a payload does not match the v1 schema."""
+    """Raised when a payload does not match the v2 schema."""
+
+
+def _parse_covariance(raw: Any) -> tuple[tuple[float, ...], ...]:
+    if (
+        not isinstance(raw, (list, tuple))
+        or len(raw) != 6
+        or any(not isinstance(row, (list, tuple)) or len(row) != 6 for row in raw)
+    ):
+        try:
+            desc = f"{len(raw)}x{[len(row) for row in raw]}"
+        except TypeError:
+            desc = type(raw).__name__
+        raise TelemetryParseError(f"covariance must be 6x6, got {desc}")
+    try:
+        return tuple(tuple(float(v) for v in row) for row in raw)
+    except (TypeError, ValueError) as exc:
+        raise TelemetryParseError(f"covariance must hold numbers: {exc}") from exc
 
 
 def parse_frame(payload: dict[str, Any]) -> TelemetryFrame:
     try:
         pos = payload["position"]
         ori = payload["orientation"]
-        pose = Pose(
+        qx = float(ori["qx"])
+        qy = float(ori["qy"])
+        qz = float(ori["qz"])
+        qw = float(ori["qw"])
+        if math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw) <= 0.0:
+            raise TelemetryParseError("orientation quaternion must be non-zero")
+        pose = Pose.from_quaternion(
             x=float(pos["x"]),
             y=float(pos["y"]),
             z=float(pos["z"]),
-            roll=float(ori["roll"]),
-            pitch=float(ori["pitch"]),
-            yaw=float(ori["yaw"]),
+            qx=qx,
+            qy=qy,
+            qz=qz,
+            qw=qw,
         )
-        noise = float(payload["noise"])
-        if noise <= 0:
-            raise TelemetryParseError(f"noise must be positive, got {noise}")
+        covariance = _parse_covariance(payload["covariance"])
+        try:
+            noise = position_sigma_from_covariance(covariance)
+        except ValueError as exc:
+            raise TelemetryParseError(str(exc)) from exc
+        health = float(payload["health"])
+        if not 0.0 <= health <= 1.0:
+            raise TelemetryParseError(f"health {health!r} outside 0..1")
         return TelemetryFrame(
             robot_id=str(payload["robot_id"]),
             timestamp=float(payload["timestamp"]),
             pose=pose,
-            noise=noise,
+            covariance=covariance,
+            health=health,
             battery=float(payload["battery"]),
+            noise=noise,
         )
     except KeyError as exc:
         raise TelemetryParseError(f"missing field {exc.args[0]!r}") from exc
