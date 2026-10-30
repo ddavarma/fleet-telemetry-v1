@@ -30,4 +30,25 @@ def test_client_hits_v1_paths(client):
     snapshot = client.fleet_snapshot()
     assert frame.robot_id == "amr-03"
     assert len(snapshot) == 4
-    assert client.calls == ["/v1/robots/amr-03/telemetry/latest", "/v1/fleet/telemetry"]
+    assert client.calls == ["/v2/robots/amr-03/telemetry/latest", "/v2/fleet/telemetry"]
+
+
+def test_parse_frame_reads_health_and_covariance(fleet_payload):
+    frame = parse_frame(fleet_payload["frames"][0])
+    assert frame.health == 0.97
+    assert frame.covariance[0][0] == pytest.approx(0.0016)
+    assert len(frame.covariance) == 6 and all(len(row) == 6 for row in frame.covariance)
+
+
+def test_bad_covariance_shape_raises_parse_error(fleet_payload):
+    raw = dict(fleet_payload["frames"][0])
+    raw["covariance"] = [[0.01] * 3] * 3
+    with pytest.raises(TelemetryParseError, match="covariance"):
+        parse_frame(raw)
+
+
+def test_missing_health_raises_parse_error(fleet_payload):
+    raw = dict(fleet_payload["frames"][0])
+    del raw["health"]
+    with pytest.raises(TelemetryParseError, match="health"):
+        parse_frame(raw)
