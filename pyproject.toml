@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fleet-telemetry"
-version = "1.4.0"
-description = "Consumer library for the fleet telemetry API (v1): pose parsing, orientation math, sensor fusion and alerts."
+version = "2.0.0"
+description = "Consumer library for the fleet telemetry API (v2): pose parsing, orientation math, sensor fusion and alerts."
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24"]
 

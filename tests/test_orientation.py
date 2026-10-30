@@ -32,3 +32,15 @@ def test_heading_wraps_into_0_360(frames):
 def test_tilt_from_roll_and_pitch():
     assert tilt_deg(pose(roll=20.0)) == pytest.approx(20.0)
     assert tilt_deg(pose(pitch=-10.0, yaw=123.0)) == pytest.approx(10.0)
+
+
+def test_negated_quaternion_gives_same_rotation():
+    # amr-03's quaternion has qw < 0: the server does not canonicalise sign.
+    q = {"qx": 0.006958, "qy": -0.002679, "qz": 0.008708, "qw": -0.999934}
+    assert q["qw"] < 0
+    a = Pose.from_quaternion(15.2, 7.7, 0.1, **q)
+    b = Pose.from_quaternion(15.2, 7.7, 0.1, **{k: -v for k, v in q.items()})
+    assert np.allclose(rotation_matrix(a), rotation_matrix(b))
+    assert heading_deg(a) == pytest.approx(heading_deg(b))
+    assert tilt_deg(a) == pytest.approx(tilt_deg(b))
+    assert heading_deg(a) == pytest.approx(359.0)
