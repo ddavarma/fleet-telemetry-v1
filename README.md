@@ -1,4 +1,4 @@
-# fleet-telemetry (v1)
+# fleet-telemetry (v2)
 
 **This is a demo target for [DriftZero](https://github.com/ddavarma/driftzero)**, an autonomous API-drift repair
 agent built for the Meta Global AI Developer Hackathon (Oct–Nov 2026). It is not a maintained library.
