@@ -1,18 +1,18 @@
-"""Parse fleet telemetry API v1 payloads into domain objects."""
+"""Parse fleet telemetry API v2 payloads into domain objects."""
 from __future__ import annotations
 
 from typing import Any, Callable
 
 from fleet_telemetry.models import Pose, TelemetryFrame
 
-API_VERSION = "v1"
-BASE_PATH = "/v1"
+API_VERSION = "v2"
+BASE_PATH = "/v2"
 
 Transport = Callable[[str], dict[str, Any]]
 
 
 class TelemetryParseError(ValueError):
-    """Raised when a payload does not match the v1 schema."""
+    """Raised when a payload does not match the v2 schema."""
 
 
 def parse_frame(payload: dict[str, Any]) -> TelemetryFrame:
@@ -23,22 +23,23 @@ def parse_frame(payload: dict[str, Any]) -> TelemetryFrame:
             x=float(pos["x"]),
             y=float(pos["y"]),
             z=float(pos["z"]),
-            roll=float(ori["roll"]),
-            pitch=float(ori["pitch"]),
-            yaw=float(ori["yaw"]),
+            qx=float(ori["qx"]),
+            qy=float(ori["qy"]),
+            qz=float(ori["qz"]),
+            qw=float(ori["qw"]),
         )
-        noise = float(payload["noise"])
-        if noise <= 0:
-            raise TelemetryParseError(f"noise must be positive, got {noise}")
         return TelemetryFrame(
             robot_id=str(payload["robot_id"]),
             timestamp=float(payload["timestamp"]),
             pose=pose,
-            noise=noise,
+            covariance=payload["covariance"],
+            health=float(payload["health"]),
             battery=float(payload["battery"]),
         )
     except KeyError as exc:
         raise TelemetryParseError(f"missing field {exc.args[0]!r}") from exc
+    except (ValueError, TypeError) as exc:
+        raise TelemetryParseError(str(exc)) from exc
 
 
 def parse_batch(payload: dict[str, Any]) -> list[TelemetryFrame]:
